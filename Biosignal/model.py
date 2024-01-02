@@ -1,28 +1,36 @@
 import numpy as np
 import os
 import torch
-import torch
 import torch.nn as nn
 import sklearn.metrics as skmetrics
 import timeit
 
 from logger import get_logger
-
+fs = 100
+first_filter_size = int(fs / 2.0)
+first_filter_stride = int(fs / 16.0)
 
 def simple_model():
     model = nn.Sequential(
-        nn.Conv1d(in_channels=1, out_channels=32, kernel_size=50, stride=6, bias=False),
-        nn.BatchNorm1d(num_features=32, eps=0.001, momentum=0.01),
+        
+        nn.Conv1d(in_channels=1, out_channels=128, kernel_size=first_filter_size, stride=first_filter_stride, bias=False),
+        nn.BatchNorm1d(num_features=128, eps=0.001, momentum=0.01),
         nn.ReLU(inplace=True),
         nn.MaxPool1d(kernel_size=8, stride=8),
         nn.Dropout(p=0.5),
-        nn.Conv1d(in_channels=32, out_channels=64, kernel_size=8, stride=1, bias=False),
-        nn.BatchNorm1d(num_features=64, eps=0.001, momentum=0.01),
+        nn.Conv1d(in_channels=128, out_channels=128, kernel_size=8, stride=1, bias=False),
+        nn.BatchNorm1d(num_features=128, eps=0.001, momentum=0.01),
         nn.ReLU(inplace=True),
-        nn.MaxPool1d(kernel_size=8, stride=8),
+        nn.Conv1d(in_channels=128, out_channels=128, kernel_size=8, stride=1, bias=False),
+        nn.BatchNorm1d(num_features=128, eps=0.001, momentum=0.01),
+        nn.ReLU(inplace=True),
+        nn.Conv1d(in_channels=128, out_channels=128, kernel_size=8, stride=1, bias=False),
+        nn.BatchNorm1d(num_features=128, eps=0.001, momentum=0.01),
+        nn.ReLU(inplace=True),
+        nn.MaxPool1d(kernel_size=4, stride=4),
         nn.Dropout(p=0.5),
         nn.Flatten(),
-        nn.Linear(in_features=384, out_features=5, bias=False)
+        nn.Linear(in_features=1280, out_features=5, bias=False)
     )
     return model
 
@@ -32,7 +40,8 @@ class SimpleModel:
     def __init__(self, config, device):
         self.model = simple_model()
         self.optimizer = torch.optim.Adam(self.model.parameters())
-        self.loss = nn.CrossEntropyLoss(reduce=False)
+        # self.loss = nn.CrossEntropyLoss(reduce=False)
+        self.loss = nn.CrossEntropyLoss(reduction='none')
         self.global_epoch = 0
         self.global_step = 0
         self.device = device
@@ -50,6 +59,7 @@ class SimpleModel:
 
             self.optimizer.zero_grad()
             y_pred = self.model(x)
+            y = y.long()
             loss = self.loss(y_pred, y)
             loss = torch.mul(loss, w)  # w=0 if for padded samples
             loss = loss.sum() / w.sum()
@@ -95,6 +105,7 @@ class SimpleModel:
                 w = torch.from_numpy(w).to(self.device)  # shape(batch_size * seq_length, )
 
                 y_pred = self.model(x)
+                y = y.long()
                 loss = self.loss(y_pred, y)
                 loss = torch.mul(loss, w)  # w=0 if for padded samples
                 loss = loss.sum() / w.sum()
